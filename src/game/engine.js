@@ -14,6 +14,7 @@ export class DahalaPakadEngine {
       phase: 'LOBBY',
       dealer: 3, // Player 0 leads first round
       currentTurn: 0,
+      playerNames: ['Player 1', 'Bot East', 'Bot North', 'Bot West'],
       hands: { 0: [], 1: [], 2: [], 3: [] },
       currentLeadSuit: null,
       trumpSuit: null,
@@ -36,6 +37,16 @@ export class DahalaPakadEngine {
     };
   }
 
+  setPlayerNames(namesMap) {
+    // namesMap: { 0: 'Alice', 1: 'Bob', 2: 'Charlie', 3: 'David' }
+    for (const [seat, name] of Object.entries(namesMap)) {
+      if (name) {
+        this.state.playerNames[Number(seat)] = name;
+      }
+    }
+    this.notify('NAMES_UPDATED', { playerNames: this.state.playerNames });
+  }
+
   notify(eventName, eventData = {}) {
     this.state.lastEvent = { name: eventName, data: eventData, timestamp: Date.now() };
     for (const listener of this.listeners) {
@@ -46,6 +57,11 @@ export class DahalaPakadEngine {
   startNewGame() {
     this.resetState();
     this.startNewRound();
+  }
+
+  cancelGame() {
+    this.state.phase = 'LOBBY';
+    this.notify('GAME_CANCELLED', {});
   }
 
   startNewRound() {

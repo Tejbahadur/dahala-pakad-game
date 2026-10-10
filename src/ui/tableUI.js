@@ -6,9 +6,10 @@ import { sounds } from './sound.js';
 import confetti from 'canvas-confetti';
 
 export class TableUI {
-  constructor(containerEl, onPlayCardCallback) {
+  constructor(containerEl, onPlayCardCallback, onCancelGameCallback) {
     this.container = containerEl;
     this.onPlayCard = onPlayCardCallback;
+    this.onCancelGame = onCancelGameCallback;
     this.latestState = null;
     this.mySeat = 0;
   }
@@ -26,13 +27,14 @@ export class TableUI {
     }
   }
 
-  getSeatLabel(absoluteSeat) {
+  getSeatLabel(absoluteSeat, playerNames = []) {
+    const customName = playerNames[absoluteSeat];
     const relPos = this.getRelativePos(absoluteSeat);
-    if (relPos === 'bottom') return 'You (South)';
-    if (relPos === 'top') return 'Partner (North)';
-    if (relPos === 'left') return `Opponent (West)`;
-    if (relPos === 'right') return `Opponent (East)`;
-    return `Player ${absoluteSeat + 1}`;
+    let posTag = '';
+    if (relPos === 'bottom') posTag = ' (You)';
+    if (relPos === 'top') posTag = ' (Partner)';
+
+    return (customName || `Player ${absoluteSeat + 1}`) + posTag;
   }
 
   render(state, mySeat, eventName = null, eventData = null) {
@@ -47,7 +49,7 @@ export class TableUI {
       confetti({ particleCount: 120, spread: 70, origin: { y: 0.6 } });
     }
 
-    const { currentTurn, trumpSuit, centerStack, capturedPiles, currentTrick, currentLeadSuit, phase, scoreSummary } = state;
+    const { currentTurn, trumpSuit, centerStack, capturedPiles, currentTrick, currentLeadSuit, phase, scoreSummary, playerNames = [] } = state;
     const playableCards = state.hands[mySeat] ? getPlayableCards(state.hands[mySeat], currentLeadSuit) : [];
 
     // Calculate score counters
@@ -89,6 +91,9 @@ export class TableUI {
               </span>
             ` : `<span class="trump-icon unset">Play off-suit to cut!</span>`}
           </div>
+
+          <!-- Cancel / Exit Game Button -->
+          <button class="btn btn-outline btn-cancel-game" title="Cancel & Exit Game">🚪 Exit Game</button>
         </header>
 
         <!-- Center Playing Table -->
@@ -104,7 +109,7 @@ export class TableUI {
               <div class="player-seat seat-${relPos} ${isCurrent ? 'active-turn' : ''}">
                 <div class="seat-badge">
                   <span class="avatar">${isSelf ? '👤' : (relPos === 'top' ? '🤝' : '🤖')}</span>
-                  <span class="seat-name">${this.getSeatLabel(seatIndex)}</span>
+                  <span class="seat-name">${this.getSeatLabel(seatIndex, playerNames)}</span>
                   <span class="card-count">${hand.length} cards</span>
                 </div>
               </div>
@@ -135,7 +140,7 @@ export class TableUI {
         <!-- User Player Hand (Bottom Area) -->
         <footer class="user-hand-area">
           <div class="turn-prompt ${currentTurn === mySeat ? 'your-turn' : ''}">
-            ${currentTurn === mySeat ? '👉 YOUR TURN! Select a card to play' : `Waiting for ${this.getSeatLabel(currentTurn)}...`}
+            ${currentTurn === mySeat ? '👉 YOUR TURN! Select a card to play' : `Waiting for ${this.getSeatLabel(currentTurn, playerNames)}...`}
           </div>
 
           <div class="cards-fan">
@@ -159,12 +164,12 @@ export class TableUI {
 
               <div class="final-score-grid">
                 <div class="score-card team-0">
-                  <h3>Team 1 (South & North)</h3>
+                  <h3>Team 1 (${playerNames[0] || 'P1'} & ${playerNames[2] || 'P3'})</h3>
                   <div class="metric"><span>Dehlas (10s):</span> <strong>${scoreSummary.tensTeam0}</strong></div>
                   <div class="metric"><span>Total Cards:</span> <strong>${scoreSummary.totalCardsTeam0}</strong></div>
                 </div>
                 <div class="score-card team-1">
-                  <h3>Team 2 (East & West)</h3>
+                  <h3>Team 2 (${playerNames[1] || 'P2'} & ${playerNames[3] || 'P4'})</h3>
                   <div class="metric"><span>Dehlas (10s):</span> <strong>${scoreSummary.tensTeam1}</strong></div>
                   <div class="metric"><span>Total Cards:</span> <strong>${scoreSummary.totalCardsTeam1}</strong></div>
                 </div>
@@ -191,6 +196,15 @@ export class TableUI {
         }
       });
     });
+
+    const cancelGameBtn = this.container.querySelector('.btn-cancel-game');
+    if (cancelGameBtn) {
+      cancelGameBtn.addEventListener('click', () => {
+        if (confirm('Are you sure you want to cancel and exit the current game?')) {
+          if (this.onCancelGame) this.onCancelGame();
+        }
+      });
+    }
 
     const nextRoundBtn = this.container.querySelector('.btn-next-round');
     if (nextRoundBtn) {

@@ -11,15 +11,28 @@ let roomUI = null;
 let tableUI = null;
 
 function init() {
-  tableUI = new TableUI(appEl, (cardId) => {
-    if (networkManager) {
-      networkManager.playCard(cardId);
+  tableUI = new TableUI(
+    appEl,
+    (cardId) => {
+      if (networkManager) {
+        networkManager.playCard(cardId);
+      }
+    },
+    () => {
+      if (networkManager) {
+        networkManager.cancelGame();
+      }
+      roomUI.render();
     }
-  });
+  );
 
   networkManager = new NetworkManager(
     (state, mySeat, eventName, eventData) => {
-      tableUI.render(state, mySeat, eventName, eventData);
+      if (state.phase === 'LOBBY') {
+        roomUI.render();
+      } else {
+        tableUI.render(state, mySeat, eventName, eventData);
+      }
     },
     (statusMsg) => {
       console.log('[Network Status]', statusMsg);
@@ -27,31 +40,31 @@ function init() {
   );
 
   roomUI = new RoomUI(appEl, {
-    onOffline: () => {
-      networkManager.startOfflineGame();
+    onOffline: (name) => {
+      networkManager.startOfflineGame(name);
     },
 
-    onCreatePeer: async () => {
+    onCreatePeer: async (name) => {
       try {
-        const code = await networkManager.createPeerJSRoom();
-        alert(`Room Created! Share this code with 3 friends: ${code}`);
+        const code = await networkManager.createPeerJSRoom(name);
+        alert(`Room Created! Share this room code with 3 friends: ${code}`);
         networkManager.startHostGame(true);
       } catch (err) {
         alert('Failed to create PeerJS room: ' + err.message);
       }
     },
 
-    onJoinPeer: async (code) => {
+    onJoinPeer: async (code, name) => {
       try {
-        await networkManager.joinPeerJSRoom(code);
+        await networkManager.joinPeerJSRoom(code, name);
       } catch (err) {
         alert('Failed to join PeerJS room: ' + err.message);
       }
     },
 
-    onCreateFirebase: async () => {
+    onCreateFirebase: async (name) => {
       try {
-        const code = await networkManager.createFirebaseRoom();
+        const code = await networkManager.createFirebaseRoom(name);
         alert(`Online Room Created! Share room code: ${code}`);
         networkManager.startHostGame(true);
       } catch (err) {
@@ -59,9 +72,9 @@ function init() {
       }
     },
 
-    onJoinFirebase: async (code) => {
+    onJoinFirebase: async (code, name) => {
       try {
-        await networkManager.joinFirebaseRoom(code, 'Player');
+        await networkManager.joinFirebaseRoom(code, name);
       } catch (err) {
         alert('Failed to join Firebase room: ' + err.message);
       }

@@ -12,6 +12,7 @@ export class NetworkManager {
     this.mySeat = 0;
     this.isHost = true;
     this.roomId = null;
+    this.playerName = localStorage.getItem('dahala_player_name') || 'Player 1';
     this.peerAdapter = null;
     this.firebaseAdapter = null;
     this.botSeats = [1, 2, 3]; // Default to 3 bots in offline mode
@@ -24,24 +25,57 @@ export class NetworkManager {
     });
   }
 
+  setPlayerName(name) {
+    if (!name) return;
+    this.playerName = name.trim();
+    localStorage.setItem('dahala_player_name', this.playerName);
+    if (this.isHost) {
+      this.engine.setPlayerNames({ [this.mySeat]: this.playerName });
+    }
+  }
+
+  cancelGame() {
+    this.onUIStatusNotification('Game cancelled by user.');
+    if (this.isHost) {
+      this.engine.cancelGame();
+    }
+    if (this.peerAdapter) {
+      this.peerAdapter.disconnect();
+    }
+    if (this.firebaseAdapter) {
+      this.firebaseAdapter.leaveRoom();
+    }
+  }
+
   // --- MODE INITIALIZATION ---
 
-  startOfflineGame() {
+  startOfflineGame(customName = null) {
+    if (customName) this.setPlayerName(customName);
     this.mode = 'OFFLINE';
     this.mySeat = 0;
     this.isHost = true;
     this.botSeats = [1, 2, 3];
     this.roomId = null;
 
-    this.onUIStatusNotification('Starting Offline Game vs 3 Bots...');
+    this.engine.setPlayerNames({
+      0: this.playerName || 'Player 1',
+      1: 'Bot East',
+      2: 'Bot North (Partner)',
+      3: 'Bot West'
+    });
+
+    this.onUIStatusNotification(`Starting Game as "${this.playerName}" vs 3 Bots...`);
     this.engine.startNewGame();
   }
 
-  async createPeerJSRoom() {
+  async createPeerJSRoom(customName = null) {
+    if (customName) this.setPlayerName(customName);
     this.mode = 'PEERJS';
     this.isHost = true;
     this.mySeat = 0;
-    this.botSeats = []; // Will be filled if host starts game with fewer than 4 players
+    this.botSeats = [];
+
+    this.engine.setPlayerNames({ 0: this.playerName });
 
     this.peerAdapter = new PeerJSAdapter(
       (data, fromSeat) => this.handleNetworkMessage(data, fromSeat),
@@ -53,7 +87,8 @@ export class NetworkManager {
     return code;
   }
 
-  async joinPeerJSRoom(roomCode) {
+  async joinPeerJSRoom(roomCode, customName = null) {
+    if (customName) this.setPlayerName(customName);
     this.mode = 'PEERJS';
     this.isHost = false;
 
@@ -65,13 +100,20 @@ export class NetworkManager {
     const seat = await this.peerAdapter.joinRoom(roomCode);
     this.mySeat = seat;
     this.roomId = roomCode;
+
+    // Send player name to host
+    this.peerAdapter.sendToHost({ type: 'SET_NAME', seat: this.mySeat, name: this.playerName });
+
     return seat;
   }
 
-  async createFirebaseRoom(customConfig = null) {
+  async createFirebaseRoom(customName = null) {
+    if (customName) this.setPlayerName(customName);
     this.mode = 'FIREBASE';
     this.isHost = true;
     this.mySeat = 0;
+
+    this.engine.setPlayerNames({ 0: this.playerName });
 
     this.firebaseAdapter = new FirebaseAdapter(
       (remoteState) => this.handleRemoteStateSync(remoteState),
@@ -83,7 +125,8 @@ export class NetworkManager {
     return code;
   }
 
-  async joinFirebaseRoom(roomCode, playerName, customConfig = null) {
+  async joinFirebaseRoom(roomCode, customName = null) {
+    if (customName) this.setPlayerName(customName);
     this.mode = 'FIREBASE';
     this.isHost = false;
 
@@ -92,7 +135,7 @@ export class NetworkManager {
       (statusType, statusData) => this.handleNetworkStatus(statusType, statusData)
     );
 
-    const seat = await this.firebaseAdapter.joinRoom(roomCode, playerName);
+    const seat = await this.firebaseAdapter.joinRoom(roomCode, this.playerName);
     this.mySeat = seat;
     this.roomId = roomCode;
     return seat;
@@ -107,7 +150,6 @@ export class NetworkManager {
         this.onUIStatusNotification(result.error);
       }
     } else {
-      // Send play action to Host
       const msg = { type: 'PLAY_CARD', seat: this.mySeat, cardId };
       if (this.mode === 'PEERJS') {
         this.peerAdapter.sendToHost(msg);
@@ -121,8 +163,10 @@ export class NetworkManager {
     if (this.mode === 'PEERJS') {
       const connectedCount = this.peerAdapter.connections.length + 1;
       this.botSeats = [];
+      const botNames = ['Bot East', 'Bot North (Partner)', 'Bot West'];
       for (let i = connectedCount; i < 4; i++) {
         this.botSeats.push(i);
+        this.engine.state.playerNames[i] = botNames[i - 1] || `Bot ${i + 1}`;
       }
     }
 
@@ -130,10 +174,11 @@ export class NetworkManager {
   }
 
   handleNetworkMessage(message, fromSeat) {
-    if (this.isHost && message.type === 'PLAY_CARD') {
-      const result = this.engine.playCard(message.seat, message.cardId);
-      if (!result.success && message.seat === fromSeat) {
-        // Send error back to player
+    if (this.isHost) {
+      if (message.type === 'PLAY_CARD') {
+        this.engine.playCard(message.seat, message.cardId);
+      } else if (message.type === 'SET_NAME') {
+        this.engine.setPlayerNames({ [message.seat]: message.name });
       }
     }
   }
@@ -149,10 +194,8 @@ export class NetworkManager {
   }
 
   handleEngineEvent(state, eventName, eventData) {
-    // 1. Send state update to UI
     this.onUIStateUpdate(state, this.mySeat, eventName, eventData);
 
-    // 2. Broadcast state over network if Host
     if (this.isHost) {
       if (this.mode === 'PEERJS') {
         this.peerAdapter.broadcast({ type: 'STATE_SYNC', state });
@@ -160,10 +203,8 @@ export class NetworkManager {
         this.firebaseAdapter.updateGameState(state);
       }
 
-      // 3. Trigger Bot Turn if current turn belongs to a bot seat
       if (state.phase === 'PLAYING' && this.botSeats.includes(state.currentTurn)) {
         const botSeat = state.currentTurn;
-        // Small delay for natural feel
         setTimeout(() => {
           if (this.engine.state.currentTurn === botSeat && this.engine.state.phase === 'PLAYING') {
             const aiCard = chooseAiMove(this.engine.state, botSeat);

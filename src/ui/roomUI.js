@@ -8,8 +8,17 @@ export class RoomUI {
     this.callbacks = callbacks; // { onOffline, onCreatePeer, onJoinPeer, onCreateFirebase, onJoinFirebase }
   }
 
+  getPlayerName() {
+    const input = this.container.querySelector('#playerNameInput');
+    const val = input ? input.value.trim() : '';
+    const name = val || 'Player 1';
+    localStorage.setItem('dahala_player_name', name);
+    return name;
+  }
+
   render() {
     const savedConfig = FirebaseAdapter.getSavedConfig();
+    const savedName = localStorage.getItem('dahala_player_name') || 'Player 1';
 
     const html = `
       <div class="lobby-backdrop">
@@ -17,6 +26,12 @@ export class RoomUI {
           <div class="lobby-header">
             <h1 class="game-logo">🎴 DAHALA PAKAD</h1>
             <p class="tagline">Traditional 4-Player Indian Card Game (Dehla Pakad / Mindi Coat)</p>
+          </div>
+
+          <!-- Player Name Selection Field -->
+          <div class="player-name-section">
+            <label for="playerNameInput">👤 YOUR PLAYER NAME:</label>
+            <input type="text" id="playerNameInput" class="text-input name-input" placeholder="Enter your name (e.g. Rahul)" value="${savedName}" maxlength="16" />
           </div>
 
           <div class="mode-selection">
@@ -123,7 +138,8 @@ export class RoomUI {
     const offlineBtn = this.container.querySelector('.btn-offline');
     if (offlineBtn) {
       offlineBtn.addEventListener('click', () => {
-        this.callbacks.onOffline();
+        const name = this.getPlayerName();
+        this.callbacks.onOffline(name);
       });
     }
 
@@ -131,7 +147,8 @@ export class RoomUI {
     const createP2PBtn = this.container.querySelector('.btn-create-p2p');
     if (createP2PBtn) {
       createP2PBtn.addEventListener('click', () => {
-        this.callbacks.onCreatePeer();
+        const name = this.getPlayerName();
+        this.callbacks.onCreatePeer(name);
       });
     }
 
@@ -166,8 +183,9 @@ export class RoomUI {
         pendingFirebaseAction = action;
         fbModal.classList.remove('hidden');
       } else {
+        const name = this.getPlayerName();
         if (action === 'CREATE') {
-          this.callbacks.onCreateFirebase();
+          this.callbacks.onCreateFirebase(name);
         } else if (action === 'JOIN') {
           activeJoinMode = 'FIREBASE';
           joinModal.classList.remove('hidden');
@@ -221,8 +239,9 @@ export class RoomUI {
         FirebaseAdapter.saveConfig(newConfig);
         fbModal.classList.add('hidden');
 
+        const name = this.getPlayerName();
         if (pendingFirebaseAction === 'CREATE') {
-          this.callbacks.onCreateFirebase();
+          this.callbacks.onCreateFirebase(name);
         } else if (pendingFirebaseAction === 'JOIN') {
           activeJoinMode = 'FIREBASE';
           joinModal.classList.remove('hidden');
@@ -239,12 +258,13 @@ export class RoomUI {
     if (confirmJoinBtn) {
       confirmJoinBtn.addEventListener('click', () => {
         const code = roomCodeInput.value.trim();
+        const name = this.getPlayerName();
         if (code) {
           joinModal.classList.add('hidden');
           if (activeJoinMode === 'PEERJS') {
-            this.callbacks.onJoinPeer(code);
+            this.callbacks.onJoinPeer(code, name);
           } else {
-            this.callbacks.onJoinFirebase(code);
+            this.callbacks.onJoinFirebase(code, name);
           }
         }
       });
