@@ -1,6 +1,6 @@
 // Firebase Realtime Database Adapter for Remote Multiplayer
 
-import { initializeApp, getApps } from 'firebase/app';
+import { initializeApp, getApps, deleteApp } from 'firebase/app';
 import { getDatabase, ref, set, onValue, update, remove, get } from 'firebase/database';
 
 export class FirebaseAdapter {
@@ -15,17 +15,30 @@ export class FirebaseAdapter {
     this.onStatus = onStatusCallback;
   }
 
+  static getSavedConfig() {
+    try {
+      const saved = localStorage.getItem('dahala_firebase_config');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.warn('Could not read saved Firebase config from localStorage', e);
+    }
+    return null;
+  }
+
+  static saveConfig(config) {
+    try {
+      localStorage.setItem('dahala_firebase_config', JSON.stringify(config));
+    } catch (e) {
+      console.warn('Could not save Firebase config to localStorage', e);
+    }
+  }
+
   init(customConfig = null) {
-    // Default fallback demo config (can be overwritten by user input in UI)
-    const firebaseConfig = customConfig || {
-      apiKey: "AIzaSyDemoConfigKeyForDahalaPakadWeb",
-      authDomain: "dahala-pakad-demo.firebaseapp.com",
-      databaseURL: "https://dahala-pakad-demo-default-rtdb.firebaseio.com",
-      projectId: "dahala-pakad-demo",
-      storageBucket: "dahala-pakad-demo.appspot.com",
-      messagingSenderId: "1234567890",
-      appId: "1:1234567890:web:abcdef123456"
-    };
+    const firebaseConfig = customConfig || FirebaseAdapter.getSavedConfig();
+
+    if (!firebaseConfig || !firebaseConfig.databaseURL) {
+      throw new Error('MISSING_CONFIG');
+    }
 
     if (!getApps().length) {
       this.app = initializeApp(firebaseConfig);
@@ -36,8 +49,8 @@ export class FirebaseAdapter {
     this.db = getDatabase(this.app);
   }
 
-  async createRoom(customRoomCode = null) {
-    if (!this.db) this.init();
+  async createRoom(customRoomCode = null, customConfig = null) {
+    this.init(customConfig);
 
     const code = customRoomCode || 'DP-' + Math.floor(1000 + Math.random() * 9000);
     this.roomId = code;
@@ -55,25 +68,41 @@ export class FirebaseAdapter {
       gameState: null
     };
 
-    await set(this.roomRef, initialRoomData);
+    try {
+      await set(this.roomRef, initialRoomData);
+    } catch (err) {
+      if (err.message.includes('PERMISSION_DENIED')) {
+        throw new Error('Firebase Database Permission Denied! Ensure your Firebase Realtime Database rules allow read/write.');
+      }
+      throw err;
+    }
 
     this.listenToRoom();
     this.onStatus('ROOM_CREATED', { roomId: this.roomId, seat: 0 });
     return this.roomId;
   }
 
-  async joinRoom(roomCode, playerName = 'Player') {
-    if (!this.db) this.init();
+  async joinRoom(roomCode, playerName = 'Player', customConfig = null) {
+    this.init(customConfig);
 
     const code = roomCode.trim().toUpperCase();
     this.roomId = code;
     this.isHost = false;
 
     this.roomRef = ref(this.db, `rooms/${this.roomId}`);
-    const snapshot = await get(this.roomRef);
+    
+    let snapshot;
+    try {
+      snapshot = await get(this.roomRef);
+    } catch (err) {
+      if (err.message.includes('PERMISSION_DENIED')) {
+        throw new Error('Firebase Database Permission Denied! Ensure your Firebase Realtime Database rules allow read/write.');
+      }
+      throw err;
+    }
 
     if (!snapshot.exists()) {
-      throw new Error(`Room code ${code} not found!`);
+      throw new Error(`Room code "${code}" not found in Firebase Database!`);
     }
 
     const roomData = snapshot.val();
@@ -129,10 +158,14 @@ export class FirebaseAdapter {
 
   async updateGameState(state) {
     if (!this.roomRef) return;
-    await update(ref(this.db, `rooms/${this.roomId}`), {
-      gameState: state,
-      lastUpdated: Date.now()
-    });
+    try {
+      await update(ref(this.db, `rooms/${this.roomId}`), {
+        gameState: state,
+        lastUpdated: Date.now()
+      });
+    } catch (err) {
+      console.error('Failed to update game state to Firebase:', err);
+    }
   }
 
   async leaveRoom() {
