@@ -12,6 +12,7 @@ export class TableUI {
     this.onCancelGame = onCancelGameCallback;
     this.latestState = null;
     this.mySeat = 0;
+    this.showLastHandModal = false;
   }
 
   /**
@@ -49,8 +50,24 @@ export class TableUI {
       confetti({ particleCount: 120, spread: 70, origin: { y: 0.6 } });
     }
 
-    const { currentTurn, trumpSuit, centerStack, capturedPiles, currentTrick, currentLeadSuit, phase, scoreSummary, playerNames = [] } = state;
-    const playableCards = state.hands[mySeat] ? getPlayableCards(state.hands[mySeat], currentLeadSuit) : [];
+    const {
+      currentTurn,
+      trumpSuit,
+      centerStack = [],
+      capturedPiles = { 0: [], 1: [] },
+      currentTrick = [],
+      currentLeadSuit,
+      phase,
+      scoreSummary,
+      playerNames = [],
+      pendingTrickResolution = null,
+      lastCompletedTrick = null
+    } = state;
+
+    const isResolving = !!pendingTrickResolution;
+    const playableCards = (!isResolving && state.hands[mySeat])
+      ? getPlayableCards(state.hands[mySeat], currentLeadSuit)
+      : [];
 
     // Calculate score counters
     const team0Tens = (capturedPiles[0] || []).filter(c => c.isTen).length;
@@ -60,6 +77,18 @@ export class TableUI {
 
     const myTeamTens = myTeam === 0 ? team0Tens : team1Tens;
     const oppTeamTens = opponentTeam === 0 ? team0Tens : team1Tens;
+
+    let turnPromptText = '';
+    if (isResolving) {
+      const winnerName = pendingTrickResolution.winnerIndex === mySeat
+        ? 'You'
+        : (playerNames[pendingTrickResolution.winnerIndex] || `Player ${pendingTrickResolution.winnerIndex + 1}`);
+      turnPromptText = `⏳ Hand completed! ${winnerName} takes the hand...`;
+    } else if (currentTurn === mySeat) {
+      turnPromptText = '👉 YOUR TURN! Select a card to play';
+    } else {
+      turnPromptText = `Waiting for ${this.getSeatLabel(currentTurn, playerNames)}...`;
+    }
 
     const html = `
       <div class="table-container">
@@ -92,16 +121,31 @@ export class TableUI {
             ` : `<span class="trump-icon unset">Play off-suit to cut!</span>`}
           </div>
 
-          <!-- Cancel / Exit Game Button -->
-          <button class="btn btn-outline btn-cancel-game" title="Cancel & Exit Game">🚪 Exit Game</button>
+          <!-- Action Buttons -->
+          <div class="header-actions">
+            ${lastCompletedTrick ? `
+              <button class="btn btn-outline btn-sm btn-view-last-hand" title="View cards placed in the last hand">
+                👁️ Last Hand
+              </button>
+            ` : ''}
+            <button class="btn btn-outline btn-cancel-game" title="Cancel & Exit Game">🚪 Exit Game</button>
+          </div>
         </header>
 
         <!-- Center Playing Table -->
         <main class="table-carpet">
+          <!-- Stack Panel placed at top-right corner of carpet -->
+          ${centerStack.length > 0 ? `
+            <div class="table-stack-panel">
+              <span class="stack-count">🗂️ ${centerStack.length} CARDS IN STACK</span>
+              <span class="stack-hint">Requires 2 consecutive wins to sweep!</span>
+            </div>
+          ` : ''}
+
           <!-- 4 Player Seats -->
           ${[0, 1, 2, 3].map(seatIndex => {
             const relPos = this.getRelativePos(seatIndex);
-            const isCurrent = currentTurn === seatIndex;
+            const isCurrent = currentTurn === seatIndex && !isResolving;
             const hand = state.hands[seatIndex] || [];
             const isSelf = seatIndex === mySeat;
 
@@ -120,18 +164,32 @@ export class TableUI {
           <div class="center-trick-area">
             ${currentTrick.map(item => {
               const relPos = this.getRelativePos(item.playerIndex);
+              const isWinner = isResolving && pendingTrickResolution.winnerIndex === item.playerIndex;
+              const seatLabel = this.getSeatLabel(item.playerIndex, playerNames);
               return `
-                <div class="played-card card-from-${relPos}">
+                <div class="played-card card-from-${relPos} ${isWinner ? 'winning-play' : ''}">
+                  <div class="played-by-tag ${isWinner ? 'winner-tag' : ''}">
+                    ${isWinner ? '👑 ' : ''}${seatLabel}
+                  </div>
                   ${createCardSVG(item.card, true)}
+                  ${isWinner ? '<div class="hand-winner-pill">★ HAND WINNER ★</div>' : ''}
                 </div>
               `;
             }).join('')}
 
-            <!-- Center Stack Indicator -->
-            ${centerStack.length > 0 ? `
-              <div class="center-stack-badge">
-                <span class="stack-count">${centerStack.length} CARDS IN STACK</span>
-                <span class="stack-hint">Requires 2 consecutive wins to sweep!</span>
+            <!-- Trick Winner Announcement Banner before taking hand -->
+            ${isResolving ? `
+              <div class="trick-resolution-toast ${pendingTrickResolution.winnerTeam === myTeam ? 'my-team' : 'opp-team'}">
+                <span class="toast-title">
+                  ${pendingTrickResolution.winnerIndex === mySeat
+                    ? '🎉 You won this hand!'
+                    : (pendingTrickResolution.winnerTeam === myTeam
+                      ? `🤝 Partner (${pendingTrickResolution.winnerName}) won this hand!`
+                      : `👑 ${pendingTrickResolution.winnerName} won this hand!`)}
+                </span>
+                <span class="toast-card-desc">
+                  Winning card: <strong>${pendingTrickResolution.winningCard?.rank}${SUIT_SYMBOLS[pendingTrickResolution.winningCard?.suit]}</strong>
+                </span>
               </div>
             ` : ''}
           </div>
@@ -139,13 +197,13 @@ export class TableUI {
 
         <!-- User Player Hand (Bottom Area) -->
         <footer class="user-hand-area">
-          <div class="turn-prompt ${currentTurn === mySeat ? 'your-turn' : ''}">
-            ${currentTurn === mySeat ? '👉 YOUR TURN! Select a card to play' : `Waiting for ${this.getSeatLabel(currentTurn, playerNames)}...`}
+          <div class="turn-prompt ${currentTurn === mySeat && !isResolving ? 'your-turn' : ''} ${isResolving ? 'resolving-turn' : ''}">
+            ${turnPromptText}
           </div>
 
           <div class="cards-fan">
             ${(state.hands[mySeat] || []).map(card => {
-              const playable = currentTurn === mySeat && playableCards.some(p => p.id === card.id);
+              const playable = !isResolving && currentTurn === mySeat && playableCards.some(p => p.id === card.id);
               return `
                 <div class="card-wrapper ${playable ? 'playable' : 'disabled'}" data-card-id="${card.id}">
                   ${createCardSVG(card, true)}
@@ -154,6 +212,36 @@ export class TableUI {
             }).join('')}
           </div>
         </footer>
+
+        <!-- View Last Hand Modal -->
+        ${this.showLastHandModal && lastCompletedTrick ? `
+          <div class="modal-overlay last-hand-overlay">
+            <div class="modal-card last-hand-modal">
+              <div class="modal-header-bar">
+                <h3>📜 Cards Placed in Last Hand</h3>
+                <button class="btn-close-last-hand" aria-label="Close">✕</button>
+              </div>
+              <p class="modal-sub">Taken by: <strong>${lastCompletedTrick.winnerName}</strong></p>
+              
+              <div class="last-hand-cards-grid">
+                ${lastCompletedTrick.cards.map(item => {
+                  const isWinner = item.playerIndex === lastCompletedTrick.winnerIndex;
+                  return `
+                    <div class="last-hand-card-col ${isWinner ? 'winner-col' : ''}">
+                      <span class="player-title">${this.getSeatLabel(item.playerIndex, playerNames)}</span>
+                      <div class="card-box">
+                        ${createCardSVG(item.card, true)}
+                      </div>
+                      ${isWinner ? '<span class="winner-crown-label">👑 Hand Winner</span>' : ''}
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+
+              <button class="btn btn-primary btn-close-last-hand-btn">Back to Table</button>
+            </div>
+          </div>
+        ` : ''}
 
         <!-- Round/Game Over Modal -->
         ${phase === 'ROUND_OVER' && scoreSummary ? `
@@ -212,5 +300,21 @@ export class TableUI {
         window.location.reload();
       });
     }
+
+    const viewLastHandBtn = this.container.querySelector('.btn-view-last-hand');
+    if (viewLastHandBtn) {
+      viewLastHandBtn.addEventListener('click', () => {
+        this.showLastHandModal = true;
+        this.render(this.latestState, this.mySeat);
+      });
+    }
+
+    const closeLastHandBtns = this.container.querySelectorAll('.btn-close-last-hand, .btn-close-last-hand-btn');
+    closeLastHandBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.showLastHandModal = false;
+        this.render(this.latestState, this.mySeat);
+      });
+    });
   }
 }

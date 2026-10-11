@@ -203,10 +203,10 @@ export class NetworkManager {
         this.firebaseAdapter.updateGameState(state);
       }
 
-      if (state.phase === 'PLAYING' && this.botSeats.includes(state.currentTurn)) {
+      if (state.phase === 'PLAYING' && !state.pendingTrickResolution && this.botSeats.includes(state.currentTurn)) {
         const botSeat = state.currentTurn;
         setTimeout(() => {
-          if (this.engine.state.currentTurn === botSeat && this.engine.state.phase === 'PLAYING') {
+          if (this.engine.state.currentTurn === botSeat && this.engine.state.phase === 'PLAYING' && !this.engine.state.pendingTrickResolution) {
             const aiCard = chooseAiMove(this.engine.state, botSeat);
             if (aiCard) {
               this.engine.playCard(botSeat, aiCard.id);

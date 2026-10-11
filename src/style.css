@@ -330,8 +330,8 @@ body {
 /* Center Trick Cards Area */
 .center-trick-area {
   position: relative;
-  width: 220px;
-  height: 220px;
+  width: 270px;
+  height: 270px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -341,25 +341,121 @@ body {
   position: absolute;
   width: var(--card-width);
   height: var(--card-height);
-  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+  transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45);
 }
 
-.card-from-bottom { transform: translateY(35px); }
-.card-from-top { transform: translateY(-35px); }
-.card-from-left { transform: translateX(-35px); }
-.card-from-right { transform: translateX(35px); }
+.card-from-bottom { transform: translateY(48px); }
+.card-from-top { transform: translateY(-48px); }
+.card-from-left { transform: translateX(-56px); }
+.card-from-right { transform: translateX(56px); }
 
-.center-stack-badge {
+.played-by-tag {
   position: absolute;
+  top: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.65rem;
+  font-weight: 700;
+  background: rgba(15, 23, 42, 0.92);
+  color: #cbd5e1;
+  border-radius: 6px;
+  padding: 1px 7px;
+  white-space: nowrap;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.played-card.winning-play {
+  z-index: 12 !important;
+  box-shadow: 0 0 24px 5px #f59e0b, 0 10px 20px rgba(0, 0, 0, 0.6);
+  border-radius: 8px;
+}
+
+.played-card.winning-play.card-from-bottom { transform: translateY(48px) scale(1.08); }
+.played-card.winning-play.card-from-top { transform: translateY(-48px) scale(1.08); }
+.played-card.winning-play.card-from-left { transform: translateX(-56px) scale(1.08); }
+.played-card.winning-play.card-from-right { transform: translateX(56px) scale(1.08); }
+
+.winner-tag {
+  background: #f59e0b !important;
+  color: #0f172a !important;
+  border-color: #d97706 !important;
+  font-weight: 800 !important;
+}
+
+.hand-winner-pill {
+  position: absolute;
+  bottom: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #f59e0b;
+  color: #0f172a;
+  font-size: 0.6rem;
+  font-weight: 900;
+  border-radius: 10px;
+  padding: 2px 8px;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  z-index: 15;
+  animation: pulse 1.5s infinite;
+}
+
+.trick-resolution-toast {
+  position: absolute;
+  z-index: 25;
+  background: rgba(15, 23, 42, 0.95);
+  border: 2px solid var(--gold-accent);
+  border-radius: 12px;
+  padding: 8px 16px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.65);
+  animation: toastPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  pointer-events: none;
+}
+
+.trick-resolution-toast.my-team {
+  border-color: #10b981;
+}
+
+.trick-resolution-toast.opp-team {
+  border-color: #f59e0b;
+}
+
+.toast-title {
+  font-weight: 800;
+  font-size: 0.85rem;
+  color: #ffffff;
+}
+
+.toast-card-desc {
+  font-size: 0.72rem;
+  color: #cbd5e1;
+  margin-top: 2px;
+}
+
+@keyframes toastPop {
+  0% { transform: scale(0.7); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.table-stack-panel {
+  position: absolute;
+  top: 14px;
+  right: 14px;
   background: rgba(245, 158, 11, 0.95);
   color: #0f172a;
-  border-radius: 12px;
+  border-radius: 10px;
   padding: 6px 12px;
   text-align: center;
   display: flex;
   flex-direction: column;
-  z-index: 2;
+  z-index: 6;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
@@ -622,3 +718,120 @@ body {
 .btn-cancel-game:hover {
   background: rgba(239, 68, 68, 0.15);
 }
+
+/* Header Actions & Last Hand Button */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-view-last-hand {
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  border-color: #38bdf8;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.08);
+}
+
+.btn-view-last-hand:hover {
+  background: rgba(56, 189, 248, 0.2);
+  color: #ffffff;
+}
+
+.resolving-turn {
+  color: #38bdf8 !important;
+  font-size: 0.85rem !important;
+  font-weight: 700 !important;
+}
+
+/* Last Hand Modal */
+.last-hand-overlay {
+  z-index: 100;
+}
+
+.last-hand-modal {
+  max-width: 520px;
+  width: 92%;
+  background: #1e293b;
+  border: 1px solid #475569;
+  text-align: center;
+}
+
+.modal-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.modal-header-bar h3 {
+  font-size: 1.1rem;
+  color: var(--gold-accent);
+}
+
+.btn-close-last-hand {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+.btn-close-last-hand:hover {
+  color: #ffffff;
+}
+
+.modal-sub {
+  font-size: 0.8rem;
+  color: #cbd5e1;
+  margin-bottom: 16px;
+}
+
+.last-hand-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.last-hand-card-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: rgba(15, 23, 42, 0.6);
+  border-radius: var(--radius-sm);
+  padding: 8px 4px;
+  border: 1px solid #334155;
+}
+
+.last-hand-card-col.winner-col {
+  border-color: var(--gold-accent);
+  background: rgba(245, 158, 11, 0.1);
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.2);
+}
+
+.last-hand-card-col .player-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #94a3b8;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.last-hand-card-col .card-box {
+  width: 65px;
+  height: 92px;
+}
+
+.winner-crown-label {
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: var(--gold-accent);
+}
+

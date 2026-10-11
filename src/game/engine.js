@@ -5,11 +5,17 @@ import { isLegalMove, evaluateTrickWinner, getTeam, calculateScore } from './rul
 
 export class DahalaPakadEngine {
   constructor() {
+    this.trickResolutionTimeout = null;
     this.resetState();
     this.listeners = [];
   }
 
   resetState() {
+    if (this.trickResolutionTimeout) {
+      clearTimeout(this.trickResolutionTimeout);
+      this.trickResolutionTimeout = null;
+    }
+
     this.state = {
       phase: 'LOBBY',
       dealer: 3, // Player 0 leads first round
@@ -22,6 +28,8 @@ export class DahalaPakadEngine {
       currentTrick: [],
       centerStack: [],
       lastTrickWinner: null,
+      pendingTrickResolution: null,
+      lastCompletedTrick: null,
       capturedPiles: { 0: [], 1: [] }, // Team 0 (p0+p2), Team 1 (p1+p3)
       tricksWon: { 0: 0, 1: 0, 2: 0, 3: 0 },
       roundNumber: 1,
@@ -60,11 +68,20 @@ export class DahalaPakadEngine {
   }
 
   cancelGame() {
+    if (this.trickResolutionTimeout) {
+      clearTimeout(this.trickResolutionTimeout);
+      this.trickResolutionTimeout = null;
+    }
     this.state.phase = 'LOBBY';
     this.notify('GAME_CANCELLED', {});
   }
 
   startNewRound() {
+    if (this.trickResolutionTimeout) {
+      clearTimeout(this.trickResolutionTimeout);
+      this.trickResolutionTimeout = null;
+    }
+
     const deck = shuffleDeck(createDeck());
     
     // Deal 13 cards to each of the 4 players
@@ -87,6 +104,8 @@ export class DahalaPakadEngine {
     this.state.currentTrick = [];
     this.state.centerStack = [];
     this.state.lastTrickWinner = null;
+    this.state.pendingTrickResolution = null;
+    this.state.lastCompletedTrick = null;
     this.state.capturedPiles = { 0: [], 1: [] };
     this.state.tricksWon = { 0: 0, 1: 0, 2: 0, 3: 0 };
     this.state.scoreSummary = null;
@@ -97,6 +116,10 @@ export class DahalaPakadEngine {
   playCard(playerIndex, cardId) {
     if (this.state.phase !== 'PLAYING') {
       return { success: false, error: 'Game is not currently in PLAYING phase.' };
+    }
+
+    if (this.state.pendingTrickResolution) {
+      return { success: false, error: 'Trick is currently being resolved, please wait.' };
     }
 
     if (this.state.currentTurn !== playerIndex) {
@@ -142,7 +165,31 @@ export class DahalaPakadEngine {
 
     // Check if trick is complete (4 cards played)
     if (this.state.currentTrick.length === 4) {
-      this.resolveTrick();
+      const winnerIndex = evaluateTrickWinner(
+        this.state.currentTrick,
+        this.state.currentLeadSuit,
+        this.state.trumpSuit
+      );
+      const winnerTeam = getTeam(winnerIndex);
+      const winningItem = this.state.currentTrick.find(t => t.playerIndex === winnerIndex);
+
+      this.state.pendingTrickResolution = {
+        winnerIndex,
+        winnerTeam,
+        winningCard: winningItem ? winningItem.card : null,
+        winnerName: this.state.playerNames[winnerIndex] || `Player ${winnerIndex + 1}`
+      };
+
+      // Notify that all 4 cards have been played and remain visible before taking the hand
+      this.notify('TRICK_COMPLETED', {
+        ...this.state.pendingTrickResolution,
+        completedTrick: [...this.state.currentTrick]
+      });
+
+      // Maintain visible trick on the table for 2.2 seconds before collecting / taking the hand
+      this.trickResolutionTimeout = setTimeout(() => {
+        this.resolveTrick();
+      }, 2200);
     } else {
       // Advance turn to next player
       this.state.currentTurn = (this.state.currentTurn + 1) % 4;
@@ -153,6 +200,13 @@ export class DahalaPakadEngine {
   }
 
   resolveTrick() {
+    if (this.trickResolutionTimeout) {
+      clearTimeout(this.trickResolutionTimeout);
+      this.trickResolutionTimeout = null;
+    }
+
+    if (this.state.currentTrick.length === 0) return;
+
     const winnerIndex = evaluateTrickWinner(
       this.state.currentTrick,
       this.state.currentLeadSuit,
@@ -191,7 +245,14 @@ export class DahalaPakadEngine {
     }
 
     const completedTrick = [...this.state.currentTrick];
+    this.state.lastCompletedTrick = {
+      cards: completedTrick,
+      winnerIndex,
+      winnerName: this.state.playerNames[winnerIndex] || `Player ${winnerIndex + 1}`
+    };
+
     this.state.currentTrick = [];
+    this.state.pendingTrickResolution = null;
     this.state.currentLeadSuit = null;
     this.state.currentTurn = winnerIndex;
 
